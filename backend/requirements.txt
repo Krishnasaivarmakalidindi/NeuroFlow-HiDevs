@@ -26,9 +26,52 @@ openai
 anthropic
 
 # ML
+# FastAPI
+fastapi
+uvicorn
+
+# Database
+asyncpg
+psycopg2-binary
+redis
+
+# Configuration
+pydantic-settings
+
+# HTTP
+httpx
+
+# Metrics
+prometheus-client
+
+# OpenTelemetry
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+
+# LLM Providers
+openai
+anthropic
+
+# ML
 mlflow
 sentence-transformers
 
 # Testing
 pytest
 pytest-asyncio
+pypdfium2
+pdfplumber
+pytesseract
+python-docx
+pandas
+httpx
+trafilatura
+python-pptx
+Pillow
+tiktoken
+sentence-transformers
+arq
+fastapi
+python-multipart
+uvicorn
