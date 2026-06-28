@@ -77,4 +77,8 @@ python-multipart
 
 # Testing
 pytest
-pytest-asyncio
+pytest-asyncio
+
+# SSE
+sse-starlette
+

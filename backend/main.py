@@ -19,7 +19,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+from api.ingest import router as ingest_router
+from api.query import router as query_router
+
+app.include_router(ingest_router)
+app.include_router(query_router)
+
 FastAPIInstrumentor.instrument_app(app)
+
 
 @app.get("/health")
 async def health():
