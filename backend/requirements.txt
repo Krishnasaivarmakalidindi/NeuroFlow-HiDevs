@@ -28,7 +28,7 @@ anthropic
 # ML
 # FastAPI
 fastapi
-uvicorn
+uvicorn[standard]
 
 # Database
 asyncpg
@@ -53,25 +53,28 @@ opentelemetry-instrumentation-fastapi
 openai
 anthropic
 
-# ML
+# ML / Embeddings
 mlflow
 sentence-transformers
 
-# Testing
-pytest
-pytest-asyncio
+# Retrieval pipeline
+tiktoken                            # token counting for context assembly
+# cross-encoder/ms-marco-MiniLM-L-6-v2 is loaded via sentence-transformers
+
+# Workers
+arq
+
+# Document extraction
 pypdfium2
 pdfplumber
 pytesseract
 python-docx
 pandas
-httpx
 trafilatura
 python-pptx
 Pillow
-tiktoken
-sentence-transformers
-arq
-fastapi
 python-multipart
-uvicorn
+
+# Testing
+pytest
+pytest-asyncio

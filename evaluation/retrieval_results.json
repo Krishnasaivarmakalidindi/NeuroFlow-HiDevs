@@ -1,0 +1,23 @@
+{
+  "evaluation_mode": "simulation",
+  "dataset_size": 20,
+  "threshold_hit_rate": 0.75,
+  "threshold_mrr": 0.55,
+  "thresholds_passed": true,
+  "baseline": {
+    "hit_rate": 0.85,
+    "mrr": 0.4383
+  },
+  "rrf": {
+    "hit_rate": 0.9,
+    "mrr": 0.6083
+  },
+  "reranked": {
+    "hit_rate": 0.95,
+    "mrr": 0.7708
+  },
+  "hyde": {
+    "hit_rate": 0.9,
+    "mrr": 0.7333
+  }
+}
