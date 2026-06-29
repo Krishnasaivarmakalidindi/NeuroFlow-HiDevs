@@ -24,6 +24,21 @@ class NeuroFlowClient:
             self.router = ModelRouter(redis_url)
             self.providers: Dict[str, BaseLLMProvider] = {}
             self.initialized = True
+            
+            # Register default providers to prevent uninitialized provider maps in production
+            try:
+                from .openai_provider import OpenAIProvider
+                from .anthropic_provider import AnthropicProvider
+                try:
+                    from backend.config import settings
+                except ImportError:
+                    from config import settings
+                import os
+                
+                self.register_provider("openai", OpenAIProvider(api_key=settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")))
+                self.register_provider("anthropic", AnthropicProvider(api_key=os.getenv("ANTHROPIC_API_KEY") or ""))
+            except Exception as e:
+                logger.warning(f"Failed to register default providers: {e}")
 
     def register_provider(self, name: str, provider: BaseLLMProvider):
         self.providers[name] = provider

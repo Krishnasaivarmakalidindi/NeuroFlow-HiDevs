@@ -1,0 +1,182 @@
+[
+  {
+    "query": "What is the primary optimization in HNSW?",
+    "answer": "HNSW optimizes nearest neighbor search by constructing a multi-layer graph where layers correspond to different link lengths, similar to a skip list.",
+    "context": "Hierarchical Navigable Small World (HNSW) graphs are a state-of-the-art structure for approximate nearest neighbor search. The primary optimization is the multi-layer structure where top layers have longer edges for fast traversal and bottom layers have shorter edges for precise navigation.",
+    "human_score": 0.95
+  },
+  {
+    "query": "Does self-attention require sequential processing?",
+    "answer": "Yes, self-attention processes tokens one after another, sequentially.",
+    "context": "Self-attention allows transformers to process all tokens in parallel, unlike recurrent models (RNNs) which require sequential processing step-by-step.",
+    "human_score": 0.1
+  },
+  {
+    "query": "What is Reciprocal Rank Fusion?",
+    "answer": "Reciprocal Rank Fusion (RRF) is a method to combine multiple search result lists by summing the reciprocal of the rank of each document across the lists.",
+    "context": "Reciprocal Rank Fusion (RRF) is an algorithm that evaluates multiple search runs (e.g., keyword and vector search) and merges them. The score of a document is computed by summing 1 / (k + rank) where rank is the position of the document in a list.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What does a Cross-Encoder do in reranking?",
+    "answer": "A Cross-Encoder computes a relevance score by processing the query and the document chunk together, capturing deep semantic interactions.",
+    "context": "Cross-encoders are used for reranking retrieved documents. Unlike bi-encoders which embed query and documents separately, cross-encoders receive the query and document together as a single input, calculating a highly accurate similarity score.",
+    "human_score": 0.95
+  },
+  {
+    "query": "What is the benefit of HyDE in RAG?",
+    "answer": "HyDE generates a hypothetical document which is then embedded to improve dense retrieval performance.",
+    "context": "Hypothetical Document Embeddings (HyDE) uses a zero-shot LLM to generate a hypothetical answer. This generated text is embedded using a dense retriever, helping to bridge the vocabulary gap between questions and chunks.",
+    "human_score": 0.9
+  },
+  {
+    "query": "How does KV cache improve LLM inference?",
+    "answer": "The KV cache stores key-value pairs of previous tokens, avoiding redundant calculations during auto-regressive generation.",
+    "context": "In LLM inference, the key-value cache (KV cache) stores key and value projections of historical tokens. This prevents recalculating attention representations of previous tokens during generation, dramatically lowering latency.",
+    "human_score": 0.95
+  },
+  {
+    "query": "What is cosine similarity?",
+    "answer": "Cosine similarity measures the angle between two vectors, ranging from -1 to 1.",
+    "context": "Cosine similarity is the dot product of two vectors divided by the product of their magnitudes. It measures the cosine of the angle between two multi-dimensional vectors, evaluating orientation rather than magnitude.",
+    "human_score": 0.85
+  },
+  {
+    "query": "What is chunking?",
+    "answer": "Chunking is the process of splitting documents into smaller passages to fit LLM context windows and improve retrieval precision.",
+    "context": "Document chunking is the process of partitioning large text documents into smaller segments or chunks. This ensures context windows are not exceeded and retrieved passages are semantically coherent.",
+    "human_score": 0.9
+  },
+  {
+    "query": "How does pgvector perform ANN searches?",
+    "answer": "pgvector supports index types like HNSW and IVFFlat inside PostgreSQL databases.",
+    "context": "pgvector is a PostgreSQL extension for vector similarity search. It supports indexing techniques such as HNSW and IVFFlat to enable fast approximate nearest neighbor (ANN) searches directly using SQL.",
+    "human_score": 0.95
+  },
+  {
+    "query": "What is prompt engineering?",
+    "answer": "Prompt engineering is the practice of designing inputs for LLMs to get desired outputs.",
+    "context": "Prompt engineering involves crafting optimal system and user instructions for language models. It is a critical component of RAG applications to guide the model's tone, format, and content generation.",
+    "human_score": 0.85
+  },
+  {
+    "query": "What is the transformer decoder architecture?",
+    "answer": "The decoder architecture uses masked self-attention to prevent looking at future tokens.",
+    "context": "The transformer decoder architecture generates text tokens auto-regressively. It utilizes masked multi-head self-attention to ensure that predictions for position i can only depend on known outputs at positions less than i.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What are hallucinations in LLMs?",
+    "answer": "Hallucinations are outputs generated by an LLM that are factually incorrect or unsupported by the input context.",
+    "context": "Hallucinations refer to instances where a generative AI model outputs information that is either factually incorrect or completely untethered from the provided input contexts or training data.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What is mean pooling in embedding models?",
+    "answer": "Mean pooling calculates the average of all token embedding vectors in a sentence.",
+    "context": "Mean pooling is a technique where sentence-level embedding is obtained by averaging the token-level embeddings output by a transformer's encoder layers, producing a single dense representation.",
+    "human_score": 0.9
+  },
+  {
+    "query": "How does BM25 rank documents?",
+    "answer": "BM25 ranks documents based on term frequency, document length, and inverse document frequency.",
+    "context": "BM25 (Best Matching 25) is a sparse search ranking algorithm based on tf-idf. It computes similarity by matching search queries against document terms, taking term saturation and document length normalization into account.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What is the purpose of a retriever in RAG?",
+    "answer": "A retriever fetches relevant documents from a database to augment the prompt for the generator LLM.",
+    "context": "Retrieval-Augmented Generation (RAG) uses a retriever to find relevant documents from a knowledge base. The fetched chunks are then fed into the prompt of the generator LLM to ground the answer in factual data.",
+    "human_score": 0.95
+  },
+  {
+    "query": "What is temperature in LLM sampling?",
+    "answer": "Temperature scales the logits before softmax to control the randomness of token generation.",
+    "context": "Temperature is a hyperparameter that controls randomness in LLM token selection. A higher temperature (e.g., 0.9) increases diversity by flattening the probability distribution, whereas a lower temperature (e.g., 0.1) makes it deterministic.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What is RLHF?",
+    "answer": "RLHF stands for Reinforcement Learning from Human Feedback.",
+    "context": "Reinforcement Learning from Human Feedback (RLHF) is a method used to align LLMs with human preferences, optimizing for helpfulness, accuracy, and safety based on pairwise comparison data.",
+    "human_score": 0.8
+  },
+  {
+    "query": "What is a vector database?",
+    "answer": "A database designed to store, index, and query high-dimensional vector embeddings efficiently.",
+    "context": "Vector databases are specialized storage systems built to manage multi-dimensional vector embeddings. They enable indexing mechanisms like HNSW to resolve cosine or Euclidean nearest-neighbors at scale.",
+    "human_score": 0.95
+  },
+  {
+    "query": "What is fine-tuning?",
+    "answer": "Fine-tuning is adapting a pre-trained model on a custom task-specific dataset.",
+    "context": "Fine-tuning updates a pre-trained model's weights using labeled datasets. It is typically contrasted with RAG, as fine-tuning teaches the model new behaviors or styles, while RAG provides real-time facts.",
+    "human_score": 0.85
+  },
+  {
+    "query": "What is OpenTelemetry?",
+    "answer": "OpenTelemetry is a framework for collecting, generating, and exporting telemetry data like traces, metrics, and logs.",
+    "context": "OpenTelemetry (OTel) is an open-source observability framework. It standardizes the collection of system traces, metrics, and logs, making it easy to track operations across complex microservice applications.",
+    "human_score": 0.95
+  },
+  {
+    "query": "Does Redis support vector search?",
+    "answer": "Yes, Redis supports vector indexing and search using Flat and HNSW algorithms.",
+    "context": "Redis provides vector search capabilities through the RediSearch module. It allows indexing and querying vector embeddings using distance metrics like cosine similarity or inner product with either FLAT or HNSW index types.",
+    "human_score": 0.9
+  },
+  {
+    "query": "Explain what a system prompt is.",
+    "answer": "A system prompt is a set of instructions that defines the behavior, persona, and constraints of an LLM agent.",
+    "context": "In chat interfaces, a system prompt provides global instructions to the LLM. It sets the agent's role, tone, output format rules, and safety bounds prior to user inputs.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What is the vocabulary gap in search?",
+    "answer": "The vocabulary gap is when search query words differ from document words despite having the same meaning.",
+    "context": "The vocabulary gap occurs in traditional keyword search (BM25) when queries and relevant documents use different synonyms (e.g., 'automobile' vs 'car'). Dense vector embeddings mitigate this by capturing semantic meaning.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What is standard deviation?",
+    "answer": "A measure of the amount of variation or dispersion of a set of values.",
+    "context": "Standard deviation is a statistical metric indicating how spread out numbers are in a data sample. A low standard deviation means values are close to the mean, while a high standard deviation indicates high variance.",
+    "human_score": 0.85
+  },
+  {
+    "query": "What is Pearson Correlation?",
+    "answer": "A statistical measure of the linear relationship between two variables, ranging from -1 to 1.",
+    "context": "The Pearson correlation coefficient evaluates linear correlation between two datasets. A value of 1 shows total positive correlation, 0 means no correlation, and -1 indicates complete negative correlation.",
+    "human_score": 0.9
+  },
+  {
+    "query": "Is Python compiled or interpreted?",
+    "answer": "Python is commonly described as an interpreted language, though it is compiled to bytecode first.",
+    "context": "Python is a high-level programming language that compiles source files into intermediate bytecode (.pyc) which is then executed by the Python Virtual Machine (CPython interpreter).",
+    "human_score": 0.85
+  },
+  {
+    "query": "How does BM25 differ from tf-idf?",
+    "answer": "BM25 limits term frequency saturation and includes document length normalization.",
+    "context": "BM25 improves upon standard TF-IDF by adding term frequency saturation scaling (so a term appearing 100 times doesn't score 100 times higher than one appearing 5 times) and normalizing scores by document length.",
+    "human_score": 0.9
+  },
+  {
+    "query": "Explain RLS in PostgreSQL.",
+    "answer": "Row-Level Security (RLS) restricts which database rows a user can access or modify based on security policies.",
+    "context": "Row-Level Security (RLS) is a feature in PostgreSQL that enables administrators to configure security policies on tables. These policies filter table rows depending on the database user executing a query.",
+    "human_score": 0.9
+  },
+  {
+    "query": "What is MLflow?",
+    "answer": "MLflow is an open-source platform for managing the end-to-end machine learning lifecycle, including tracking and registry.",
+    "context": "MLflow is an open-source tool that helps machine learning teams log model metrics, artifacts, hyper-parameters, and register trained models in a centralized repository for tracking experiments.",
+    "human_score": 0.9
+  },
+  {
+    "query": "Can we run Postgres and Redis in docker containers?",
+    "answer": "Yes, Docker containers are commonly used to host PostgreSQL and Redis services.",
+    "context": "Containerization tools like Docker allow developers to run isolated database services including Postgres and Redis in containers, simplifying deployment orchestration using docker-compose.",
+    "human_score": 0.9
+  }
+]

@@ -21,9 +21,11 @@ app = FastAPI(lifespan=lifespan)
 
 from api.ingest import router as ingest_router
 from api.query import router as query_router
+from api.feedback import router as feedback_router
 
 app.include_router(ingest_router)
 app.include_router(query_router)
+app.include_router(feedback_router)
 
 FastAPIInstrumentor.instrument_app(app)
 

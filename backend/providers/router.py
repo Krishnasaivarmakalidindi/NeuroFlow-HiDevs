@@ -30,7 +30,9 @@ class ModelRouter:
         # 4. evaluation -> always use judge model
         if criteria.task_type == "evaluation":
             # Just look for a judge model or fallback to a known judge like gpt-4o
-            for m in models:
+            # Never use fine tuned models for evaluation.
+            eval_models = [m for m in models if not m.get("fine_tuned", False)]
+            for m in eval_models:
                 if m.get("is_judge", False) or m["model"] == "gpt-4o":
                     return m["model"]
             return "gpt-4o" # default judge if not found
