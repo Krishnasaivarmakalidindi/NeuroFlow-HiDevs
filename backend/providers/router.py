@@ -50,8 +50,9 @@ class ModelRouter:
         # 3. prefer fine-tuned -> route to fine-tuned
         if criteria.prefer_fine_tuned:
             fine_tuned_models = [m for m in filtered_models if m.get("fine_tuned", False)]
-            if fine_tuned_models:
-                filtered_models = fine_tuned_models
+            if criteria.task_type:
+                fine_tuned_models = [m for m in fine_tuned_models if m.get("task_type") == criteria.task_type]
+            filtered_models = fine_tuned_models
 
         # 5. max cost -> filter expensive models
         if criteria.max_cost_per_call is not None:

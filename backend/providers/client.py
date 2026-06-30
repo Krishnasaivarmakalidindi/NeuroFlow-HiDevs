@@ -53,7 +53,7 @@ class NeuroFlowClient:
     def _get_provider_for_model(self, model: str) -> BaseLLMProvider:
         # Simple static mapping based on prefix or explicit logic. 
         # Ideally this would be part of the router model data.
-        if model.startswith("gpt"):
+        if model.startswith("gpt") or model.startswith("llama") or model.startswith("finetuned") or model.startswith("fine-tuned"):
             return self.providers.get("openai")
         elif model.startswith("claude"):
             return self.providers.get("anthropic")
