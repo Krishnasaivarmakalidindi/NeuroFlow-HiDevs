@@ -5,7 +5,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response
 
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from db.health import check_postgres, check_redis, check_mlflow
+from db.health import check_postgres, check_redis, check_mlflow, check_health_extended
 
 from db.pool import DatabasePool
 
@@ -38,19 +38,7 @@ FastAPIInstrumentor.instrument_app(app)
 
 @app.get("/health")
 async def health():
-    postgres_ok = await check_postgres()
-    redis_ok = await check_redis()
-    mlflow_ok = await check_mlflow()
-    
-    status = "ok" if (postgres_ok and redis_ok and mlflow_ok) else "error"
-    return {
-        "status": status,
-        "checks": {
-            "postgres": postgres_ok,
-            "redis": redis_ok,
-            "mlflow": mlflow_ok
-        }
-    }
+    return await check_health_extended()
 
 @app.get("/metrics")
 async def metrics():

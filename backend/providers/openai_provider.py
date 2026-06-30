@@ -13,6 +13,13 @@ except ImportError:
 
 from .base import BaseLLMProvider, ChatMessage, GenerationResult
 
+# Import resilience framework exceptions for client compliance
+try:
+    from resilience import CircuitOpenError, NeuroFlowTimeoutError
+except ImportError:
+    CircuitOpenError = Exception
+    NeuroFlowTimeoutError = Exception
+
 logger = logging.getLogger(__name__)
 
 PRICE_TABLE = {

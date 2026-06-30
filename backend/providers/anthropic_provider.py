@@ -4,6 +4,13 @@ import logging
 from typing import List, AsyncGenerator, Dict, Any, Tuple
 from anthropic import AsyncAnthropic, RateLimitError
 
+# Import resilience framework exceptions for client compliance
+try:
+    from resilience import CircuitOpenError, NeuroFlowTimeoutError
+except ImportError:
+    CircuitOpenError = Exception
+    NeuroFlowTimeoutError = Exception
+
 from .base import BaseLLMProvider, ChatMessage, GenerationResult
 
 logger = logging.getLogger(__name__)

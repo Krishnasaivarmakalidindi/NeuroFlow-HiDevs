@@ -4,10 +4,13 @@ import logging
 import time
 import uuid
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from opentelemetry import trace
+from pydantic import BaseModel
+
+from resilience import SlidingWindowRateLimiter
 
 try:
     from pipelines.generation.generator import RAGGenerator
@@ -31,7 +34,20 @@ class QueryRequest(BaseModel):
     stream: bool = True
 
 @router.post("/query")
-async def post_query(request: QueryRequest, background_tasks: BackgroundTasks):
+async def post_query(request: QueryRequest, req: Request, background_tasks: BackgroundTasks):
+    # API Rate Limiting Check (60/minute/IP)
+    ip = req.client.host if req.client else "127.0.0.1"
+    limiter = SlidingWindowRateLimiter()
+    is_allowed, retry_after = await limiter.is_allowed(ip, "/query", limit=60, window_seconds=60)
+    await limiter.close()
+    
+    if not is_allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"error": "rate_limit_exceeded", "retry_after": retry_after},
+            headers={"Retry-After": str(retry_after)}
+        )
+        
     if not request.query or not request.pipeline_id:
         raise HTTPException(status_code=400, detail="query and pipeline_id must be provided")
 

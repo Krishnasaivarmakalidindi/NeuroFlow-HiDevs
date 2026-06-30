@@ -68,16 +68,80 @@ class NeuroFlowClient:
         if not provider:
             raise ValueError(f"Provider not found for routed model: {model}")
 
-        start_time = time.time()
+        provider_name = "unknown"
+        for name, p in self.providers.items():
+            if p == provider:
+                provider_name = name
+                break
+
+        # 1. Rate Limiting (Provider & Pipeline)
+        from resilience import RedisTokenBucket, CircuitBreaker, TimeoutManager, AdaptiveTimeoutTracker
         
-        with tracer.start_as_current_span("llm.chat") as span:
-            span.set_attribute("model", model)
-            
+        provider_limiter = RedisTokenBucket(provider_name, max_capacity=3000, refill_rate=50.0)
+        await provider_limiter.wait_for_token()
+        await provider_limiter.close()
+
+        pipeline_id = kwargs.get("pipeline_id")
+        if pipeline_id:
+            limit = 60
             try:
+                redis_url = self.redis_client.connection_pool.connection_kwargs.get("url")
+                temp_redis = redis.from_url(redis_url, decode_responses=True)
+                custom_limit = await temp_redis.get(f"rpb:pipeline:{pipeline_id}:rpm")
+                if custom_limit:
+                    limit = int(custom_limit)
+                await temp_redis.close()
+            except Exception:
+                pass
+            
+            pipeline_limiter = RedisTokenBucket(f"pipeline:{pipeline_id}", max_capacity=limit, refill_rate=limit / 60.0)
+            await pipeline_limiter.wait_for_token()
+            await pipeline_limiter.close()
+
+        # 2. Timeout and Circuit Breaker
+        timeout_manager = TimeoutManager()
+        adaptive_tracker = AdaptiveTimeoutTracker()
+        start_time = time.time()
+
+        async def call_with_cb():
+            async with CircuitBreaker(provider_name, failure_threshold=5, recovery_timeout=60, half_open_max_calls=3):
                 if stream:
-                    return self._stream_wrapper(provider, messages, model, start_time, span, **kwargs)
+                    # Resolve async stream generator inside CB
+                    gen = provider.stream(messages, model, **kwargs)
+                    return gen
                 else:
-                    result = await provider.complete(messages, model, **kwargs)
+                    return await provider.complete(messages, model, **kwargs)
+
+        try:
+            task_type = "chat_completion"
+            if criteria.task_type == "evaluation" or kwargs.get("is_evaluation"):
+                task_type = "evaluation"
+                
+            use_adaptive = kwargs.get("use_adaptive", True)
+            
+            if stream:
+                # Setup stream within CB context
+                stream_gen = await timeout_manager.execute(task_type, call_with_cb(), use_adaptive=use_adaptive)
+                
+                # Wrap generator yields
+                async def generator_wrapper() -> AsyncGenerator[str, None]:
+                    with tracer.start_as_current_span("llm.stream") as stream_span:
+                        stream_span.set_attribute("model", model)
+                        try:
+                            async for chunk in stream_gen:
+                                yield chunk
+                            
+                            latency_ms = (time.time() - start_time) * 1000
+                            stream_span.set_attribute("latency_ms", latency_ms)
+                            await self._track_metrics(model, 0.0)
+                        except Exception as e:
+                            stream_span.record_exception(e)
+                            raise e
+                return generator_wrapper()
+            else:
+                with tracer.start_as_current_span("llm.chat") as span:
+                    span.set_attribute("model", model)
+                    result = await timeout_manager.execute(task_type, call_with_cb(), use_adaptive=use_adaptive)
                     
                     span.set_attribute("input_tokens", result.input_tokens)
                     span.set_attribute("output_tokens", result.output_tokens)
@@ -86,27 +150,14 @@ class NeuroFlowClient:
                     
                     await self._track_metrics(model, result.cost_usd)
                     
+                    # Record latency in adaptive tracker
+                    latency = time.time() - start_time
+                    await adaptive_tracker.record_latency(task_type, latency)
+                    
                     return result
-            except Exception as e:
-                span.record_exception(e)
-                raise
-
-    async def _stream_wrapper(self, provider, messages, model, start_time, span, **kwargs) -> AsyncGenerator[str, None]:
-        # For streams, we might not get token counts directly from all providers easily without counting them ourselves
-        # or checking the final chunk. For simplicity, we just emit latency.
-        try:
-            async for chunk in provider.stream(messages, model, **kwargs):
-                yield chunk
-                
-            latency_ms = (time.time() - start_time) * 1000
-            span.set_attribute("latency_ms", latency_ms)
-            
-            # Note: actual token counting for stream requires a token counter (e.g. tiktoken)
-            # Here we just track a call.
-            await self._track_metrics(model, 0.0)
-        except Exception as e:
-            span.record_exception(e)
-            raise
+        finally:
+            await timeout_manager.close()
+            await adaptive_tracker.close()
 
     async def embed(self, texts: List[str], criteria: RoutingCriteria, **kwargs) -> List[List[float]]:
         model = await self.router.route(criteria)
@@ -115,20 +166,61 @@ class NeuroFlowClient:
         if not provider:
             raise ValueError(f"Provider not found for routed model: {model}")
 
-        start_time = time.time()
-        
-        with tracer.start_as_current_span("llm.embed") as span:
-            span.set_attribute("model", model)
-            
+        provider_name = "unknown"
+        for name, p in self.providers.items():
+            if p == provider:
+                provider_name = name
+                break
+
+        # 1. Rate Limiting (Provider & Pipeline)
+        from resilience import RedisTokenBucket, CircuitBreaker, TimeoutManager, AdaptiveTimeoutTracker
+
+        provider_limiter = RedisTokenBucket(provider_name, max_capacity=3000, refill_rate=50.0)
+        await provider_limiter.wait_for_token()
+        await provider_limiter.close()
+
+        pipeline_id = kwargs.get("pipeline_id")
+        if pipeline_id:
+            limit = 60
             try:
-                result = await provider.embed(texts, model, **kwargs)
+                redis_url = self.redis_client.connection_pool.connection_kwargs.get("url")
+                temp_redis = redis.from_url(redis_url, decode_responses=True)
+                custom_limit = await temp_redis.get(f"rpb:pipeline:{pipeline_id}:rpm")
+                if custom_limit:
+                    limit = int(custom_limit)
+                await temp_redis.close()
+            except Exception:
+                pass
+            
+            pipeline_limiter = RedisTokenBucket(f"pipeline:{pipeline_id}", max_capacity=limit, refill_rate=limit / 60.0)
+            await pipeline_limiter.wait_for_token()
+            await pipeline_limiter.close()
+
+        # 2. Timeout and Circuit Breaker
+        timeout_manager = TimeoutManager()
+        adaptive_tracker = AdaptiveTimeoutTracker()
+        start_time = time.time()
+
+        async def call_with_cb():
+            async with CircuitBreaker(provider_name, failure_threshold=5, recovery_timeout=60, half_open_max_calls=3):
+                return await provider.embed(texts, model, **kwargs)
+
+        try:
+            task_type = "embedding"
+            with tracer.start_as_current_span("llm.embed") as span:
+                span.set_attribute("model", model)
+                result = await timeout_manager.execute(task_type, call_with_cb(), use_adaptive=kwargs.get("use_adaptive", True))
+                
                 latency_ms = (time.time() - start_time) * 1000
                 span.set_attribute("latency_ms", latency_ms)
                 
-                # Approximate cost tracking could be added here
                 await self._track_metrics(model, 0.0)
                 
+                # Record latency in adaptive tracker
+                latency = time.time() - start_time
+                await adaptive_tracker.record_latency(task_type, latency)
+                
                 return result
-            except Exception as e:
-                span.record_exception(e)
-                raise
+        finally:
+            await timeout_manager.close()
+            await adaptive_tracker.close()
