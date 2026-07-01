@@ -16,6 +16,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
+import time
+
 async def evaluate_context_precision(
     query: str,
     chunks: list,
@@ -25,10 +27,14 @@ async def evaluate_context_precision(
     if not chunks:
         return 0.0
 
+    t0 = time.perf_counter()
     client = NeuroFlowClient()
     criteria = RoutingCriteria(task_type="evaluation")
 
     with tracer.start_as_current_span("evaluation.context_precision") as span:
+        span.set_attribute("pipeline_id", str(kwargs.get("pipeline_id", "default")))
+        span.set_attribute("run_id", str(kwargs.get("run_id", "default")))
+        span.set_attribute("judge_model", criteria.model or "gpt-4o")
         async def evaluate_chunk_usefulness(chunk: str) -> float:
             prompt = (
                 f"Query:\n{query}\n\n"
@@ -61,6 +67,9 @@ async def evaluate_context_precision(
 
         score = numerator / denominator if denominator > 0 else 0.0
 
+        latency_ms = (time.perf_counter() - t0) * 1000
+        span.set_attribute("metric_score", score)
+        span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("score", score)
         span.set_attribute("chunks_count", len(chunks))
         return score

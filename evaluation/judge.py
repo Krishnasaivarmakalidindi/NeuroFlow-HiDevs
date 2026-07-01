@@ -43,6 +43,7 @@ class EvaluationJudge:
             logger.warning(f"Failed to ensure evaluations metadata column: {e}")
 
     async def evaluate_run(self, run_id: str, **kwargs) -> dict:
+        t0 = time.perf_counter()
         run_uuid = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
         
         # 1. Fetch run details
@@ -51,12 +52,13 @@ class EvaluationJudge:
             await self._ensure_db_schema(conn)
             
             run = await conn.fetchrow(
-                "SELECT query, generation, retrieved_chunk_ids, metadata FROM pipeline_runs WHERE id = $1;",
+                "SELECT pipeline_id, query, generation, retrieved_chunk_ids, metadata FROM pipeline_runs WHERE id = $1;",
                 run_uuid
             )
             if not run:
                 raise ValueError(f"Run {run_uuid} not found in pipeline_runs.")
                 
+            pipeline_uuid = run["pipeline_id"]
             query = run["query"]
             generation = run["generation"] or ""
             retrieved_chunk_ids = run["retrieved_chunk_ids"] or []
@@ -72,7 +74,6 @@ class EvaluationJudge:
         # 2. Run evaluations in parallel
         context = "\n\n".join(chunks)
         
-        # Determine the judge model. Never use fine-tuned models.
         try:
             judge_model = await self.client.router.route(RoutingCriteria(task_type="evaluation"))
         except Exception as e:
@@ -81,7 +82,12 @@ class EvaluationJudge:
 
         with tracer.start_as_current_span("evaluation.judge") as span:
             span.set_attribute("run_id", str(run_uuid))
+            span.set_attribute("pipeline_id", str(pipeline_uuid))
             span.set_attribute("judge_model", judge_model)
+            
+            # Pass routing context down
+            kwargs["pipeline_id"] = str(pipeline_uuid)
+            kwargs["run_id"] = str(run_uuid)
             
             # Execute metrics
             faithfulness_task = evaluate_faithfulness(query, generation, context, **kwargs)
@@ -97,6 +103,10 @@ class EvaluationJudge:
             )
             
             overall = 0.35 * f + 0.30 * r + 0.20 * p + 0.15 * c
+            latency_ms = (time.perf_counter() - t0) * 1000
+            
+            span.set_attribute("overall_score", overall)
+            span.set_attribute("latency_ms", latency_ms)
             
             span.set_attribute("scores", json.dumps({
                 "faithfulness": f,
@@ -105,6 +115,11 @@ class EvaluationJudge:
                 "context_recall": c
             }))
             span.set_attribute("overall", overall)
+
+            # Prometheus Metrics Update
+            from monitoring import metrics
+            metrics.eval_faithfulness.labels(pipeline_id=str(pipeline_uuid)).set(f)
+            metrics.eval_overall.labels(pipeline_id=str(pipeline_uuid)).set(overall)
 
             # 3. Store results
             async with pool.acquire() as conn:

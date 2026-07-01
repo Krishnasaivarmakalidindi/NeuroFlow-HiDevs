@@ -1,8 +1,9 @@
 import docx
 from typing import List
 
-from ..models import ExtractedPage
+from monitoring.tracing import trace_sync
 
+@trace_sync("ingestion.extract.docx")
 def extract_docx(file_path: str) -> List[ExtractedPage]:
     doc = docx.Document(file_path)
     pages = []

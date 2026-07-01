@@ -126,10 +126,18 @@ class RetrievalPipeline:
             else self._config.use_query_expansion
         )
 
+        pipeline_uuid = extra_filters.get("pipeline_id") if extra_filters else None
+        if not pipeline_uuid:
+            pipeline_uuid = "default"
+        run_uuid = extra_filters.get("run_id") if extra_filters else "default"
+
         with tracer.start_as_current_span("retrieval.pipeline") as span:
+            span.set_attribute("pipeline_id", str(pipeline_uuid))
+            span.set_attribute("run_id", str(run_uuid))
             span.set_attribute("query", query)
             span.set_attribute("use_hyde", _use_hyde)
             span.set_attribute("use_reranker", _use_reranker)
+            span.set_attribute("reranker", self._config.reranker_model or "cohere-rerank-v3")
 
             # ---- Step 1: Query processing ----------------------------------------
             processed: ProcessedQuery = await self._query_processor.process(query)
@@ -137,6 +145,8 @@ class RetrievalPipeline:
                 processed.expanded = []
             if extra_filters:
                 processed.metadata_filters.update(extra_filters)
+
+            span.set_attribute("query_type", processed.query_type.value)
 
             # ---- Step 2: HyDE (optional) -----------------------------------------
             hyde_embedding: Optional[List[float]] = None
@@ -153,30 +163,48 @@ class RetrievalPipeline:
             meta_results = retrieval_map["metadata"]
 
             # ---- Step 4: RRF fusion ----------------------------------------------
-            all_lists = [lst for lst in [dense_results, sparse_results, meta_results] if lst]
-            fused: List[RetrievalResult] = (
-                reciprocal_rank_fusion(all_lists, k=self._config.rrf_k)
-                if all_lists
-                else []
-            )
+            with tracer.start_as_current_span("retrieval.fusion") as fusion_span:
+                fusion_span.set_attribute("pipeline_id", str(pipeline_uuid))
+                fusion_span.set_attribute("run_id", str(run_uuid))
+                all_lists = [lst for lst in [dense_results, sparse_results, meta_results] if lst]
+                fused: List[RetrievalResult] = (
+                    reciprocal_rank_fusion(all_lists, k=self._config.rrf_k)
+                    if all_lists
+                    else []
+                )
+                fusion_span.set_attribute("fused_count", len(fused))
 
             # ---- Step 5: Reranking -----------------------------------------------
-            final_results: List[RetrievalResult]
-            if _use_reranker and fused:
-                final_results = await self._reranker.rerank(
-                    query=query,
-                    candidates=fused,
-                    top_k=self._config.rerank_final_k,
-                )
-            else:
-                final_results = fused[: self._config.rerank_final_k]
+            with tracer.start_as_current_span("retrieval.rerank") as rerank_span:
+                rerank_span.set_attribute("pipeline_id", str(pipeline_uuid))
+                rerank_span.set_attribute("run_id", str(run_uuid))
+                rerank_span.set_attribute("reranker", self._config.reranker_model or "cohere-rerank-v3")
+                final_results: List[RetrievalResult]
+                if _use_reranker and fused:
+                    final_results = await self._reranker.rerank(
+                        query=query,
+                        candidates=fused,
+                        top_k=self._config.rerank_final_k,
+                    )
+                else:
+                    final_results = fused[: self._config.rerank_final_k]
+                rerank_span.set_attribute("reranked_count", len(final_results))
 
             # ---- Step 6: Context assembly ----------------------------------------
-            assembled = self._assembler.assemble(final_results)
+            with tracer.start_as_current_span("retrieval.assemble") as assemble_span:
+                assemble_span.set_attribute("pipeline_id", str(pipeline_uuid))
+                assemble_span.set_attribute("run_id", str(run_uuid))
+                assembled = self._assembler.assemble(final_results)
+                assemble_span.set_attribute("token_count", assembled.get("total_tokens", 0))
 
             latency_ms = (time.perf_counter() - t0) * 1_000
             span.set_attribute("latency_ms", latency_ms)
             span.set_attribute("chunks_used", len(assembled["chunks_used"]))
+            span.set_attribute("retrieved_chunks", ",".join(assembled["chunks_used"]))
+
+            # Prometheus Metrics Update
+            from monitoring import metrics
+            metrics.retrieval_latency.labels(pipeline_id=str(pipeline_uuid)).observe(latency_ms / 1000.0)
 
             return {
                 **assembled,

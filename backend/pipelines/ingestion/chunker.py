@@ -93,6 +93,9 @@ def chunk_hierarchical(page: ExtractedPage) -> List[Dict[str, Any]]:
         
     return chunks
 
+from monitoring.tracing import trace_sync
+
+@trace_sync("ingestion.chunk")
 def chunk_document(pages: List[ExtractedPage]) -> List[Dict[str, Any]]:
     all_chunks = []
     total_pages = len(pages)

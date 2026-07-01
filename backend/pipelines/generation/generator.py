@@ -141,14 +141,16 @@ class RAGGenerator:
         pipeline_uuid = uuid.UUID(pipeline_id) if isinstance(pipeline_id, str) else pipeline_id
 
         # 1. Run Retrieval Pipeline (OTel Span)
+        # 1. Run Retrieval Pipeline (OTel Span)
         with tracer.start_as_current_span("generation.pipeline") as pipeline_span:
+            pipeline_span.set_attribute("pipeline_id", str(pipeline_uuid))
             pipeline_span.set_attribute("run_id", str(run_id))
             pipeline_span.set_attribute("query", query)
 
             if stream_queue:
                 await stream_queue.put({"type": "retrieval_start"})
 
-            retrieval_result = await self.retrieval_pipeline.run(query, **kwargs)
+            retrieval_result = await self.retrieval_pipeline.run(query, pipeline_id=str(pipeline_uuid), run_id=str(run_id))
             context = retrieval_result["context"]
             chunks_used = retrieval_result["chunks_used"]
             sources = retrieval_result["sources"]
@@ -162,7 +164,9 @@ class RAGGenerator:
                 })
 
             # 2. Build Prompt (OTel Span)
-            with tracer.start_as_current_span("generation.prompt") as prompt_span:
+            with tracer.start_as_current_span("generation.prompt_build") as prompt_span:
+                prompt_span.set_attribute("pipeline_id", str(pipeline_uuid))
+                prompt_span.set_attribute("run_id", str(run_id))
                 prompt = PromptBuilder.build(query, context, query_type)
                 prompt_span.set_attribute("prompt_length", len(prompt))
 
@@ -199,9 +203,12 @@ class RAGGenerator:
             start_time = time.time()
 
             input_tokens = len(self.tokenizer.encode(prompt))
+            model_used = "llama-3.3-70b-versatile"
 
-            with tracer.start_as_current_span("generation.stream") as stream_span:
+            with tracer.start_as_current_span("generation.llm_call") as stream_span:
+                stream_span.set_attribute("pipeline_id", str(pipeline_uuid))
                 stream_span.set_attribute("run_id", str(run_id))
+                stream_span.set_attribute("model", model_used)
                 try:
                     # Request stream from client
                     stream_generator = await self.client.chat(messages, criteria, stream=True)
@@ -217,22 +224,24 @@ class RAGGenerator:
                     clean_chunk = cot_stripper.flush()
                     if clean_chunk and stream_queue:
                         await stream_queue.put({"type": "token", "delta": clean_chunk})
+                        
+                    # Update LLM Calls Metric
+                    from monitoring import metrics
+                    metrics.llm_calls_total.labels(pipeline_id=str(pipeline_uuid), provider="openai", model=model_used, status="success").inc()
                 except Exception as e:
                     stream_span.record_exception(e)
                     logger.error(f"Streaming error: {e}")
+                    
+                    from monitoring import metrics
+                    metrics.llm_calls_total.labels(pipeline_id=str(pipeline_uuid), provider="openai", model=model_used, status="error").inc()
+                    metrics.queries_total.labels(pipeline_id=str(pipeline_uuid), status="error").inc()
                     raise e
 
             latency_ms = (time.time() - start_time) * 1000
             think_content = cot_stripper.think_content.strip()
 
-            # Clean final answer (we strip reasoning out of the returned answer)
-            # If the model didn't use <think> tags, it's just the full answer.
-            # If it did, cot_stripper extracted think_content, so the final clean answer
-            # is the full answer with <think>...</think> block removed.
             final_answer = accumulated_answer
             if think_content:
-                # Remove <think>...</think> block from the final answer
-                # Handle cases with or without closing tag gracefully
                 if "<think>" in final_answer:
                     parts = final_answer.split("<think>", 1)
                     before = parts[0]
@@ -242,42 +251,48 @@ class RAGGenerator:
                     final_answer = before + after
             
             final_answer = final_answer.strip()
-
             output_tokens = len(self.tokenizer.encode(final_answer))
-            model_used = "llama-3.3-70b-versatile" # default / router model
+            
+            # Cost calculation
+            cost_usd = (input_tokens * 0.00000059) + (output_tokens * 0.00000079)
 
             # 5. Citations Resolution (OTel Span)
-            with tracer.start_as_current_span("generation.citations") as citations_span:
-                citations = CitationParser.parse(final_answer, retrieval_result["reranked"])
+            with tracer.start_as_current_span("generation.citation_parse") as citations_span:
+                citations_span.set_attribute("pipeline_id", str(pipeline_uuid))
                 citations_span.set_attribute("run_id", str(run_id))
+                citations = CitationParser.parse(final_answer, retrieval_result["reranked"])
                 citations_span.set_attribute("citation_count", len(citations))
 
-            # 6. DB Update: status=complete
-            try:
-                if db_pool:
-                    async with db_pool.acquire() as conn:
-                        await conn.execute(
-                            """
-                            UPDATE pipeline_runs
-                            SET generation = $1, latency_ms = $2, input_tokens = $3,
-                                output_tokens = $4, model_used = $5, status = $6, metadata = $7::jsonb
-                            WHERE id = $8;
-                            """,
-                            final_answer,
-                            int(latency_ms),
-                            input_tokens,
-                            output_tokens,
-                            model_used,
-                            "complete",
-                            json.dumps({
-                                "prompt": prompt,
-                                "think_content": think_content,
-                                "citations": [c.__dict__ for c in citations]
-                            }),
-                            run_id
-                        )
-            except Exception as e:
-                logger.error(f"Database error during pipeline_runs final update: {e}")
+            # 6. DB Update: status=complete (OTel Span)
+            with tracer.start_as_current_span("generation.log_run") as log_span:
+                log_span.set_attribute("pipeline_id", str(pipeline_uuid))
+                log_span.set_attribute("run_id", str(run_id))
+                try:
+                    if db_pool:
+                        async with db_pool.acquire() as conn:
+                            await conn.execute(
+                                """
+                                UPDATE pipeline_runs
+                                SET generation = $1, latency_ms = $2, input_tokens = $3,
+                                    output_tokens = $4, model_used = $5, status = $6, metadata = $7::jsonb
+                                WHERE id = $8;
+                                """,
+                                final_answer,
+                                int(latency_ms),
+                                input_tokens,
+                                output_tokens,
+                                model_used,
+                                "complete",
+                                json.dumps({
+                                    "prompt": prompt,
+                                    "think_content": think_content,
+                                    "citations": [c.__dict__ for c in citations]
+                                }),
+                                run_id
+                            )
+                except Exception as e:
+                    logger.error(f"Database error during pipeline_runs final update: {e}")
+                    log_span.record_exception(e)
 
             # 7. Async Evaluation Enqueue
             try:
@@ -292,14 +307,23 @@ class RAGGenerator:
                     "run_id": str(run_id),
                     "citations": [c.__dict__ for c in citations]
                 })
-                # Indicate end of queue stream
                 await stream_queue.put(None)
 
             # Set top-level span attributes
+            pipeline_span.set_attribute("pipeline_id", str(pipeline_uuid))
+            pipeline_span.set_attribute("run_id", str(run_id))
             pipeline_span.set_attribute("model", model_used)
-            pipeline_span.set_attribute("tokens", input_tokens + output_tokens)
-            pipeline_span.set_attribute("latency", latency_ms)
-            pipeline_span.set_attribute("citation_count", len(citations))
+            pipeline_span.set_attribute("input_tokens", input_tokens)
+            pipeline_span.set_attribute("output_tokens", output_tokens)
+            pipeline_span.set_attribute("cost_usd", cost_usd)
+            pipeline_span.set_attribute("latency_ms", latency_ms)
+            pipeline_span.set_attribute("citations", ",".join([c.document_name for c in citations]))
+
+            # Prometheus Metrics Update
+            from monitoring import metrics
+            metrics.generation_latency.labels(pipeline_id=str(pipeline_uuid), model=model_used).observe(latency_ms / 1000.0)
+            metrics.llm_cost.labels(pipeline_id=str(pipeline_uuid), provider="openai", model=model_used).observe(cost_usd)
+            metrics.queries_total.labels(pipeline_id=str(pipeline_uuid), status="success").inc()
 
             return GenerationResult(
                 answer=final_answer,

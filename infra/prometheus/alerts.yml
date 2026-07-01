@@ -1,0 +1,38 @@
+groups:
+  - name: neuroflow-alerts
+    rules:
+      - alert: HighEvaluationFailureRate
+        expr: sum(rate(queries_total{status="error"}[5m])) / sum(rate(queries_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High failure rate in queries"
+          description: "RAG queries failure rate is above 5% in the last 5 minutes."
+
+      - alert: CircuitBreakerOpen
+        expr: circuit_breakers_open > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker is open"
+          description: "Resilience circuit breaker for {{ $labels.provider }} has tripped and is currently OPEN."
+
+      - alert: EvaluationScoreDegraded
+        expr: eval_overall < 0.6
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG quality score degraded"
+          description: "The rolling overall evaluation score for pipeline {{ $labels.pipeline_id }} is below 0.60."
+
+      - alert: QueueDepthHigh
+        expr: queue_depth > 50
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingestion queue depth is high"
+          description: "The active ingestion worker queue length is currently {{ $value }} (above threshold of 50)."

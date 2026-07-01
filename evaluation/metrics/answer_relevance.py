@@ -24,15 +24,21 @@ def cosine_similarity(v1: list, v2: list) -> float:
         return 0.0
     return dot_prod / (norm_v1 * norm_v2)
 
+import time
+
 async def evaluate_answer_relevance(
     query: str,
     answer: str,
     **kwargs
 ) -> float:
+    t0 = time.perf_counter()
     client = NeuroFlowClient()
     criteria = RoutingCriteria(task_type="evaluation")
 
     with tracer.start_as_current_span("evaluation.answer_relevance") as span:
+        span.set_attribute("pipeline_id", str(kwargs.get("pipeline_id", "default")))
+        span.set_attribute("run_id", str(kwargs.get("run_id", "default")))
+        span.set_attribute("judge_model", criteria.model or "gpt-4o")
         prompt = (
             "Generate 3-5 questions that this answer answers.\n\n"
             f"Answer:\n{answer}"
@@ -69,6 +75,7 @@ async def evaluate_answer_relevance(
         except Exception as e:
             logger.error(f"Failed to generate embeddings in answer_relevance: {e}")
             span.record_exception(e)
+            span.set_attribute("metric_score", 0.0)
             span.set_attribute("score", 0.0)
             return 0.0
 
@@ -82,6 +89,9 @@ async def evaluate_answer_relevance(
         else:
             score = sum(similarities) / len(similarities)
 
+        latency_ms = (time.perf_counter() - t0) * 1000
+        span.set_attribute("metric_score", score)
+        span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("score", score)
         span.set_attribute("generated_questions_count", len(generated_questions))
         return score

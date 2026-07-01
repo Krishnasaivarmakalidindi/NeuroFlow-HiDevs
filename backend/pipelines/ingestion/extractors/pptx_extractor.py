@@ -9,10 +9,12 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+from monitoring.tracing import trace_async
 from providers.client import NeuroFlowClient
 from providers.router import RoutingCriteria
 from providers.base import ChatMessage
 
+@trace_async("ingestion.extract.pptx")
 async def extract_pptx(file_path: str) -> List[ExtractedPage]:
     prs = pptx.Presentation(file_path)
     pages = []

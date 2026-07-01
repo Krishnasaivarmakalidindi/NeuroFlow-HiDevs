@@ -22,16 +22,22 @@ def split_into_sentences(text: str) -> list:
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return [s.strip() for s in sentences if s.strip()]
 
+import time
+
 async def evaluate_context_recall(
     query: str,
     chunks: list,
     answer: str,
     **kwargs
 ) -> float:
+    t0 = time.perf_counter()
     client = NeuroFlowClient()
     criteria = RoutingCriteria(task_type="evaluation")
 
     with tracer.start_as_current_span("evaluation.context_recall") as span:
+        span.set_attribute("pipeline_id", str(kwargs.get("pipeline_id", "default")))
+        span.set_attribute("run_id", str(kwargs.get("run_id", "default")))
+        span.set_attribute("judge_model", criteria.model or "gpt-4o")
         sentences = split_into_sentences(answer)
         if not sentences:
             span.set_attribute("score", 1.0)
@@ -64,6 +70,9 @@ async def evaluate_context_recall(
 
         score = sum(results) / len(sentences)
 
+        latency_ms = (time.perf_counter() - t0) * 1000
+        span.set_attribute("metric_score", score)
+        span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("score", score)
         span.set_attribute("sentences_count", len(sentences))
         return score

@@ -1,8 +1,9 @@
 import pandas as pd
 from typing import List
 
-from ..models import ExtractedPage
+from monitoring.tracing import trace_sync
 
+@trace_sync("ingestion.extract.csv")
 def extract_csv(file_path: str) -> List[ExtractedPage]:
     df = pd.read_csv(file_path)
     pages = []

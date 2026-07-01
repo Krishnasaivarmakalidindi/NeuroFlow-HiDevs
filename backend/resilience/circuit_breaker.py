@@ -60,6 +60,12 @@ class CircuitBreaker:
             state = await self.get_state()
             span.set_attribute("circuit.state", state)
             
+            from monitoring import metrics
+            if state == "OPEN":
+                metrics.circuit_breakers_open.labels(provider=self.name).set(1)
+            else:
+                metrics.circuit_breakers_open.labels(provider=self.name).set(0)
+            
             if state == "OPEN":
                 opened_at = await self.get_opened_at()
                 if time.time() - opened_at > self.recovery_timeout:
@@ -69,6 +75,7 @@ class CircuitBreaker:
                     await self.redis_client.delete(f"circuit:{self.name}:half_open_successes")
                     state = "HALF_OPEN"
                     span.set_attribute("circuit.state", "HALF_OPEN")
+                    metrics.circuit_breakers_open.labels(provider=self.name).set(0)
                 else:
                     raise CircuitOpenError(f"Circuit '{self.name}' is OPEN.")
             
@@ -84,6 +91,7 @@ class CircuitBreaker:
         if "Mock" in type(self.redis_client).__name__:
             return
         state = await self.get_state()
+        from monitoring import metrics
         
         if exc_type is not None:
             logger.warning(f"Circuit breaker '{self.name}' call failed: {exc_val}")
@@ -94,12 +102,16 @@ class CircuitBreaker:
                     await self.set_state("OPEN")
                     await self.redis_client.set(f"circuit:{self.name}:opened_at", str(time.time()))
                     logger.critical(f"Circuit breaker '{self.name}' opened due to failures.")
+                    metrics.circuit_breaker_trips.labels(pipeline_id="default", provider=self.name, status="open").inc()
+                    metrics.circuit_breakers_open.labels(provider=self.name).set(1)
             elif state == "HALF_OPEN":
                 # Tripping back to OPEN on any failure
                 await self.set_state("OPEN")
                 await self.redis_client.set(f"circuit:{self.name}:opened_at", str(time.time()))
                 await self.redis_client.delete(f"circuit:{self.name}:half_open_calls")
                 await self.redis_client.delete(f"circuit:{self.name}:half_open_successes")
+                metrics.circuit_breaker_trips.labels(pipeline_id="default", provider=self.name, status="open").inc()
+                metrics.circuit_breakers_open.labels(provider=self.name).set(1)
         else:
             if state == "CLOSED":
                 # Reset consecutive failure counter on success
@@ -113,6 +125,7 @@ class CircuitBreaker:
                     await self.redis_client.delete(f"circuit:{self.name}:half_open_calls")
                     await self.redis_client.delete(f"circuit:{self.name}:half_open_successes")
                     logger.info(f"Circuit breaker '{self.name}' closed and recovered.")
+                    metrics.circuit_breakers_open.labels(provider=self.name).set(0)
         
         await self.redis_client.aclose()
 

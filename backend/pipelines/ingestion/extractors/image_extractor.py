@@ -10,10 +10,12 @@ import os
 
 # Add providers to path if needed or just absolute import
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+from monitoring.tracing import trace_async
 from providers.client import NeuroFlowClient
 from providers.router import RoutingCriteria
 from providers.base import ChatMessage
 
+@trace_async("ingestion.extract.image")
 async def extract_image(file_path: str) -> List[ExtractedPage]:
     with Image.open(file_path) as img:
         # Convert to RGB if needed

@@ -69,4 +69,13 @@ class PipelineOptimizer:
                     "suggestion": "refine query expansion system prompt or model selection"
                 })
 
+        # Integrate QualityAnomalyDetector anomalies
+        try:
+            from monitoring.anomaly_detector import QualityAnomalyDetector
+            detector = QualityAnomalyDetector()
+            anomalies = await detector.detect_anomalies(pipeline_id)
+            suggestions.extend(anomalies)
+        except Exception as e:
+            logger.error(f"Failed to detect quality anomalies: {e}")
+
         return suggestions

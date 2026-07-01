@@ -4,8 +4,9 @@ from urllib.parse import urlparse
 import trafilatura
 from typing import List
 
-from ..models import ExtractedPage
+from monitoring.tracing import trace_async
 
+@trace_async("ingestion.extract.url")
 async def extract_url(url: str) -> List[ExtractedPage]:
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"

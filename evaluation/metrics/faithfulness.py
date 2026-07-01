@@ -1,5 +1,6 @@
 import re
 import json
+import time
 import logging
 import asyncio
 from opentelemetry import trace
@@ -43,10 +44,15 @@ async def evaluate_faithfulness(
     if context == "":
         return 0.0
 
+    t0 = time.perf_counter()
     client = NeuroFlowClient()
     criteria = RoutingCriteria(task_type="evaluation")
 
     with tracer.start_as_current_span("evaluation.faithfulness") as span:
+        span.set_attribute("pipeline_id", str(kwargs.get("pipeline_id", "default")))
+        span.set_attribute("run_id", str(kwargs.get("run_id", "default")))
+        span.set_attribute("judge_model", criteria.model or "gpt-4o")
+
         # Step 1: Extract claims
         extract_prompt = (
             "Extract all factual claims from the answer.\n"
@@ -60,11 +66,12 @@ async def evaluate_faithfulness(
         except Exception as e:
             logger.error(f"Failed to extract claims in faithfulness metric: {e}")
             span.record_exception(e)
+            span.set_attribute("metric_score", 0.0)
             span.set_attribute("score", 0.0)
             return 0.0
 
         if not claims:
-            # If no claims are made, it is technically faithful
+            span.set_attribute("metric_score", 1.0)
             span.set_attribute("score", 1.0)
             return 1.0
 
@@ -93,6 +100,10 @@ async def evaluate_faithfulness(
         scores = await asyncio.gather(*tasks)
         
         score = sum(scores) / len(claims)
+        latency_ms = (time.perf_counter() - t0) * 1000
+        
+        span.set_attribute("metric_score", score)
+        span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("score", score)
         span.set_attribute("claims_count", len(claims))
         return score

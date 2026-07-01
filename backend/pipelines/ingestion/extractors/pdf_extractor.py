@@ -4,8 +4,9 @@ import pytesseract
 from PIL import Image
 from typing import List
 
-from ..models import ExtractedPage
+from monitoring.tracing import trace_sync
 
+@trace_sync("ingestion.extract.pdf")
 def extract_pdf(file_path: str) -> List[ExtractedPage]:
     pages = []
     

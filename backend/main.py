@@ -9,9 +9,12 @@ from db.health import check_postgres, check_redis, check_mlflow, check_health_ex
 
 from db.pool import DatabasePool
 
+from monitoring.tracing import get_tracer
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    get_tracer()
     await DatabasePool.get_pool()
     yield
     # Shutdown
