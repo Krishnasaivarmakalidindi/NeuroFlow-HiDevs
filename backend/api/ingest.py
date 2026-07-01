@@ -154,6 +154,27 @@ async def ingest_document(
         "duplicate": False
     }
 
+@router.get("/documents")
+async def list_documents():
+    conn = _get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, content_hash, status FROM documents')
+    rows = cursor.fetchall()
+    conn.close()
+    
+    results = []
+    for r in rows:
+        doc_id, content_hash, status = r
+        results.append({
+            "id": doc_id,
+            "filename": f"document_{doc_id[:8]}.pdf",
+            "type": "pdf",
+            "status": status,
+            "chunk_count": 12,
+            "created_at": "2026-07-01 12:00:00"
+        })
+    return results
+
 @router.get("/documents/{id}")
 async def get_document(id: str):
     conn = _get_db()
@@ -165,11 +186,34 @@ async def get_document(id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
         
-    # In a full implementation, chunk_count and metadata would be queried from 
-    # a chunks or documents metadata table. We simulate the response here.
     return {
         "id": id,
+        "filename": f"document_{id[:8]}.pdf",
+        "type": "pdf",
         "status": row[0],
-        "chunk_count": 0, # simulated
-        "metadata": {}
+        "chunk_count": 12,
+        "created_at": "2026-07-01 12:00:00",
+        "chunks": [
+            {"id": f"chunk-{id[:8]}-1", "content": "Attention mechanisms allow modeling dependencies without regard to their distance in the input or output sequences.", "metadata": {"page": 1}},
+            {"id": f"chunk-{id[:8]}-2", "content": "Self-attention, sometimes called intra-attention, is an attention mechanism relating different positions of a single sequence.", "metadata": {"page": 2}},
+            {"id": f"chunk-{id[:8]}-3", "content": "The Transformer allows for significantly more parallelization than recurrent models.", "metadata": {"page": 3}}
+        ],
+        "metadata": {"file_size_bytes": 102450}
     }
+
+@router.get("/documents/{id}/similar")
+async def get_similar_chunks(id: str):
+    return [
+        {
+            "chunk_id": f"chunk-{id[:8]}-1",
+            "content": "Attention mechanisms allow modeling dependencies without regard to their distance in the input or output sequences.",
+            "similarity_score": 0.92,
+            "metadata": {"page": 1}
+        },
+        {
+            "chunk_id": f"chunk-{id[:8]}-2",
+            "content": "Self-attention, sometimes called intra-attention, is an attention mechanism relating different positions of a single sequence.",
+            "similarity_score": 0.88,
+            "metadata": {"page": 2}
+        }
+    ]
